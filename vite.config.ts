@@ -8,7 +8,7 @@ import Components from "unplugin-vue-components/vite";
 import { ArcoResolver } from "unplugin-vue-components/resolvers";
 import manifest from "./manifest.json";
 import { visualizer } from "rollup-plugin-visualizer";
-import { sentryVitePlugin } from "@sentry/vite-plugin";
+
 
 const getCRXVersion = () => {
   if (process.env.CRX_VER) {
@@ -93,26 +93,10 @@ export default defineConfig(({ mode }) => {
           //   ],
           // },
         },
-        plugins: [
-          sentryVitePlugin({
-            authToken: process.env.SENTRY_AUTH_TOKEN,
-            org: "bytevet",
-            project: "proxyverse",
-            telemetry: false,
-            sourcemaps: {
-              filesToDeleteAfterUpload: "**/*.js.map",
-            },
-            bundleSizeOptimizations: {
-              excludeDebugStatements: true,
-            },
-            release: {
-              inject: true,
-              dist: `v${getCRXVersion()}-${mode ? mode : "crx"}`,
-            },
-          }),
+        plugins: [        
           visualizer({
             filename: "stats.html",
-            open: true,
+            open: false,
           }),
         ],
       },
