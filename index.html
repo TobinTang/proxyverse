@@ -5,6 +5,16 @@
     <title>%VITE_APP_TITLE%</title>
     <link rel="shortcut icon" href="mini-logo.png" type="image/png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    /* 这里就是 popup 的真实高度，你想多高就写多少 */
+    height: 420px;       /* 比默认高一点，大约能多出两行 */
+    overflow: hidden;    /* 不出现外层滚动条 */
+  }
+</style>
   </head>
   <body>
     <div id="app"></div>
