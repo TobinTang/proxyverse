@@ -38,7 +38,7 @@ It's still in the early development stage, and more features are still on the w
 
 Proxyverse is using [transifex](https://explore.transifex.com/bytevet/proxyverse/) for translations.
 
-## Modifications at 16/15/2025
+## Modifications at 16/11/2025
 
 此分支版本专注于隐私保护、用户界面改进以及本地运行<br>
 1 所有追踪、遥测和远程报告功能均已完全移除。<br>
