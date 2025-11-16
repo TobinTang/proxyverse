@@ -49,6 +49,9 @@ Proxyverse is using [transifex](https://explore.transifex.com/bytevet/proxyverse
 6 代理模式更改时自动刷新<br>
 7 修改了插件显示的图标<br>
 
+<img width="522" height="830" alt="image" src="https://github.com/user-attachments/assets/d05d6878-0240-4366-9039-ed8ea550f0af" />
+
+
 ✅ Summary of Modifications 
 
 This fork focuses on privacy, UI improvements, and local-only operation.
