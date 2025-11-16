@@ -5,7 +5,6 @@ import { onMounted, ref, toRaw } from "vue";
 import {
   IconDesktop,
   IconSwap,
-  IconRelation,
   IconPlus,
   IconTool,
 } from "@arco-design/web-vue/es/icon";
@@ -23,33 +22,32 @@ const router = useRouter();
 const profiles = ref<ProfilesStorage>({});
 const selectedKeys = defineModel<string[]>();
 
-// 多色圆点（用于尚未检测国家的 profile）
+// 多色圆点（用于 profile 列表）
 const colorPalette = [
-  "#ff7070", // 红
-  "#ffa640", // 橙
-  "#ffd84d", // 黄
-  "#8bd448", // 绿
-  "#48c9c9", // 青
-  "#4a8bff", // 蓝
-  "#9f6bff", // 紫
-  "#ff73c7", // 粉
-  "#00b894", // 青绿
-  "#fab1a0", // 淡橙
+  "#ff7070",
+  "#ffa640",
+  "#ffd84d",
+  "#8bd448",
+  "#48c9c9",
+  "#4a8bff",
+  "#9f6bff",
+  "#ff73c7",
+  "#00b894",
+  "#fab1a0",
 ];
 
 interface ProfileCountryInfo {
-  code: string;   // 国家代码，如 JP / HK
-  name: string;   // 国家名称
-  flag: string;   // 国旗 emoji
-  city?: string;  // 城市
-  ip?: string;    // IP
+  code: string;
+  name: string;
+  flag: string;
+  city?: string;
+  ip?: string;
 }
 
-// 保存 profile 出口国家信息
 const COUNTRY_STORAGE_KEY = "profileCountries";
 const profileCountries = ref<Record<string, ProfileCountryInfo>>({});
 
-// 当前出口 IP（底部显示）
+// 底部出口 IP
 const currentExitInfo = ref<{
   ip: string;
   country: string;
@@ -57,90 +55,86 @@ const currentExitInfo = ref<{
   flag: string;
 } | null>(null);
 
-// 国家代码 -> 国旗 emoji
+// Chrome 当前代理模式
+const systemProxyMode = ref<string | null>(null);
+
 const countryCodeToFlag = (code: string): string => {
   if (!code || code.length !== 2) return "🌐";
   const base = 0x1f1e6;
-  const chars = code
-    .toUpperCase()
-    .split("")
-    .map((c) => base + (c.charCodeAt(0) - 65));
-  return String.fromCodePoint(...chars);
+  return String.fromCodePoint(
+    ...code
+      .toUpperCase()
+      .split("")
+      .map((c) => base + (c.charCodeAt(0) - 65))
+  );
 };
 
-// 使用 ip-api.com 检测当前出口国家/IP，并记录到 profileCountries & currentExitInfo
+// 检测出口 IP
 const detectExitCountry = async (profileID: string) => {
   try {
-    // 免费接口，仅支持 http；在扩展环境中是允许的
     const resp = await fetch("http://ip-api.com/json/?lang=en");
     const data = await resp.json();
+    if (!data || data.status !== "success") return;
 
-    if (!data || data.status !== "success") {
-      console.warn("Failed to detect exit country", data);
-      return;
-    }
-
-    const code: string = data.countryCode || "UN";
-    const name: string = data.country || "Unknown";
-    const city: string = data.city || data.regionName || name;
-    const ip: string = data.query || "";
+    const code = data.countryCode ?? "UN";
     const flag = countryCodeToFlag(code);
+    const country = data.country ?? "Unknown";
+    const city = data.city ?? data.regionName ?? country;
+    const ip = data.query ?? "";
 
-    const updated: Record<string, ProfileCountryInfo> = {
+    profileCountries.value = {
       ...profileCountries.value,
-      [profileID]: { code, name, flag, city, ip },
-    };
-    profileCountries.value = updated;
-
-    // 当前出口 IP 信息（底部展示）
-    currentExitInfo.value = {
-      ip,
-      country: name,
-      city,
-      flag,
+      [profileID]: { code, name: country, flag, city, ip },
     };
 
-    // 持久化保存
-    chrome.storage.local.set({ [COUNTRY_STORAGE_KEY]: updated });
+    currentExitInfo.value = { ip, country, city, flag };
+
+    chrome.storage.local.set({
+      [COUNTRY_STORAGE_KEY]: profileCountries.value,
+    });
   } catch (e) {
     console.error("detectExitCountry error:", e);
   }
 };
 
+// 检测代理模式
+const refreshSystemProxyMode = () => {
+  try {
+    (chrome as any).proxy?.settings?.get(
+      { incognito: false },
+      (details: any) => {
+        systemProxyMode.value = details?.value?.mode ?? null;
+      }
+    );
+  } catch {
+    systemProxyMode.value = null;
+  }
+};
+
 onMounted(async () => {
-  // 读取 profile 列表
   profiles.value = await listProfiles();
 
-  // 当前激活的 profile
   const proxy = await getCurrentProxySetting();
   const profileID = proxy.activeProfile?.profileID;
-  if (profileID) {
-    selectedKeys.value = [profileID];
-  }
 
-  // 从 storage 读取曾经检测过的 profile 出口信息
+  if (profileID) selectedKeys.value = [profileID];
+
   chrome.storage.local.get(COUNTRY_STORAGE_KEY, (result) => {
-    const saved = result[COUNTRY_STORAGE_KEY];
-    if (saved && typeof saved === "object") {
-      profileCountries.value = saved as Record<string, ProfileCountryInfo>;
-
-      // 如果当前 profile 有记录，用它初始化底部出口信息
-      if (profileID && saved[profileID]) {
-        const info = saved[profileID] as ProfileCountryInfo;
-        currentExitInfo.value = {
-          ip: info.ip || "",
-          country: info.name,
-          city: info.city || info.name,
-          flag: info.flag || countryCodeToFlag(info.code),
-        };
-      }
+    const saved = result[COUNTRY_STORAGE_KEY] ?? {};
+    profileCountries.value = saved;
+    if (profileID && saved[profileID]) {
+      const i = saved[profileID];
+      currentExitInfo.value = {
+        ip: i.ip ?? "",
+        country: i.name,
+        city: i.city ?? i.name,
+        flag: i.flag,
+      };
     }
   });
 
-  // 主动检测一次当前出口 IP（保证底部信息是最新的）
-  if (profileID) {
-    detectExitCountry(profileID);
-  }
+  if (profileID) detectExitCountry(profileID);
+  refreshSystemProxyMode();
 });
 
 const jumpTo = (to: RouteLocationRaw) => {
@@ -148,21 +142,16 @@ const jumpTo = (to: RouteLocationRaw) => {
   window.open(`/index.html#${path}`, import.meta.url);
 };
 
-// 打开 ip.sb 检查出口 IP（手动确认）
-const openIPCheck = () => {
-  chrome.tabs.create({ url: "https://ip.sb" });
-};
+const openIPCheck = () => chrome.tabs.create({ url: "https://ip.sb" });
 
 // 切换代理
 const setProxyByProfile = async (val: ProxyProfile) => {
   try {
     const raw = toRaw(val);
     await setProxy(raw);
-    const pid = typeof val === "string" ? val : raw.profileID;
-    selectedKeys.value = [pid];
-
-    // 切换成功后检测该 profile 的出口国家/IP
-    detectExitCountry(pid);
+    selectedKeys.value = [raw.profileID];
+    detectExitCountry(raw.profileID);
+    refreshSystemProxyMode();
   } catch (e: any) {
     Message.error({
       content: Host.getMessage("config_feedback_error_occurred", e.toString()),
@@ -181,50 +170,64 @@ const setProxyByProfile = async (val: ProxyProfile) => {
 
     <a-layout-content class="profiles">
       <a-menu :selected-keys="selectedKeys">
-        <!-- 直连 -->
+        <!-- 直连（绕过系统） -->
         <a-menu-item
           :key="SystemProfile.DIRECT.profileID"
           @click.prevent="() => setProxyByProfile(SystemProfile.DIRECT)"
         >
-          <template #icon><icon-swap /></template>
-          {{ $t("mode_direct") }}
+          <template #icon>
+            <span class="menu-icon-holder"><icon-swap /></span>
+          </template>
+          直连（绕过系统）
         </a-menu-item>
 
-        <!-- 使用系统代理 -->
+        <!-- 系统代理（继承 OS） -->
         <a-menu-item
           :key="SystemProfile.SYSTEM.profileID"
           @click.prevent="() => setProxyByProfile(SystemProfile.SYSTEM)"
         >
-          <template #icon><icon-desktop /></template>
-          {{ $t("mode_system") }}
+          <template #icon>
+            <span class="menu-icon-holder">
+              <span
+                v-if="systemProxyMode === 'system'"
+                class="sys-dot sys-on"
+              />
+              <span
+                v-else-if="
+                  systemProxyMode === 'fixed_servers' ||
+                  systemProxyMode === 'pac_script'
+                "
+                class="sys-dot sys-custom"
+              />
+              <span v-else class="sys-dot sys-off" />
+            </span>
+          </template>
+          系统代理（继承 OS）
         </a-menu-item>
 
-        <!-- 新建代理：和上面同级 -->
+        <!-- 新建代理 -->
         <a-menu-item
           key="create_profile"
           @click.prevent="jumpTo({ name: 'profile.home' })"
         >
           <template #icon>
-            <icon-plus />
+            <span class="menu-icon-holder"><icon-plus /></span>
           </template>
-          {{ $t("mode_profile_create") }}
+          新建代理
         </a-menu-item>
 
         <!-- Mac 风格极细分割线 -->
         <a-divider />
 
-        <!-- 下方正式的 profile 列表：带国旗 / 城市 / 彩色竖条 -->
+        <!-- 用户 profile 列表 -->
         <a-menu-item
           v-for="(item, index) in profiles"
           :key="item.profileID"
           @click.prevent="() => setProxyByProfile(item)"
           class="custom-profiles"
-          :style="{
-            '--indicator-color': colorPalette[index % colorPalette.length],
-          }"
+          :style="{ '--indicator-color': colorPalette[index % colorPalette.length] }"
         >
           <template #icon>
-            <!-- 已检测过国家：显示国旗 -->
             <span
               v-if="profileCountries[item.profileID]"
               class="flag-icon"
@@ -232,12 +235,9 @@ const setProxyByProfile = async (val: ProxyProfile) => {
             >
               {{ profileCountries[item.profileID].flag }}
             </span>
-
-            <!-- 未检测过：显示彩色圆点 -->
             <span v-else class="color-indicator"></span>
           </template>
 
-          <!-- 名称 + 城市文本 -->
           <span class="profile-text">
             {{ item.profileName }}
             <span
@@ -251,33 +251,23 @@ const setProxyByProfile = async (val: ProxyProfile) => {
       </a-menu>
     </a-layout-content>
 
-    <!-- 底部按钮区 + 当前出口 IP 显示 -->
     <a-layout-footer>
       <section class="settings">
         <a-button-group type="text" size="large">
-          <!-- 配置 -->
           <a-button @click="jumpTo({ name: 'profile.home' })">
-            <template #icon>
-              <icon-tool size="medium" />
-            </template>
-            {{ $t("nav_config") }}
+            <template #icon><icon-tool /></template>
+            配置
           </a-button>
 
-          <!-- IP 检查 -->
           <a-button @click="openIPCheck">
-            <template #icon>
-              <icon-desktop size="medium" />
-            </template>
+            <template #icon><icon-desktop /></template>
             IP
           </a-button>
 
           <a-divider direction="vertical" />
-
-          <!-- 主题切换 -->
           <ThemeSwitcher size="large" />
         </a-button-group>
 
-        <!-- 当前出口 IP 区域（靠左显示） -->
         <div v-if="currentExitInfo" class="exit-info">
           当前出口 IP：
           <span class="exit-ip">{{ currentExitInfo.ip }}</span>
@@ -292,125 +282,150 @@ const setProxyByProfile = async (val: ProxyProfile) => {
 </template>
 
 <style lang="scss">
+/* popup 本身不滚动，高度由 index.html 决定 */
 .popup {
   display: flex;
   flex-direction: column;
   width: 100%;
-  max-height: calc(100vh + 50px);
+  height: 100%;     /* 吃满 index.html 里设定的 560px */
+  max-height: 100%;
+  overflow: hidden;
+}
 
-  .logo {
-    text-align: center;
-    border-bottom: 0.5px solid rgba(255, 255, 255, 0.08); /* Mac 风格细线 */
-    background-color: var(--color-bg-4);
-    padding: 0.6em 0.4em;
+/* 生效 Mac 风格：中间列表滚动，细行高 */
+.profiles {
+  overflow-y: auto;
 
-    img {
-      max-height: 2.6em;
-    }
+  :deep(.arco-divider-horizontal) {
+    margin: 4px 0;
+    border-top: 0.5px solid rgba(255, 255, 255, 0.06);
   }
 
-  .settings {
-    padding: 0.2em 0.6em 0.4em;
-    text-align: center;
-    border-top: 0.5px solid rgba(255, 255, 255, 0.08); /* Mac 风格细线 */
-    background-color: var(--color-bg-5);
+  .arco-menu-inner {
+    padding-left: 0;
 
-    .exit-info {
-      margin-top: 4px;
-      font-size: 11px;
-      color: var(--color-text-3);
-      display: flex;
-      justify-content: flex-start; /* 靠左显示 */
-      align-items: center;
-      gap: 4px;
+    .arco-menu-item {
+      position: relative;
+      padding: 6px 12px !important;   /* 行高更紧凑 */
+      min-height: 32px !important;
+      font-size: 13px;
+      line-height: 16px;
 
-      .exit-ip {
-        font-family: monospace;
+      .profile-text {
+        display: inline-flex;
+        align-items: baseline;
+        gap: 4px;
+      }
+
+      .profile-city {
         font-size: 11px;
+        color: var(--color-text-3);
       }
 
-      .exit-flag {
-        font-size: 13px;
+      .color-indicator {
+        display: inline-block;
+        width: 0.85em;
+        height: 0.85em;
+        border-radius: 50%;
+        background-color: var(--indicator-color, #999);
+        margin-right: 6px;
       }
 
-      .exit-city {
-        opacity: 0.9;
+      .flag-icon {
+        font-size: 1.1em;
+        margin-right: 6px;
+        line-height: 1;
+      }
+
+      &.custom-profiles::before {
+        content: "";
+        display: block;
+        height: 100%;
+        width: 4px;
+        background-color: var(--indicator-color, #999);
+        position: absolute;
+        left: 0;
+        top: 0;
+        border-radius: 0 3px 3px 0;
+      }
+
+      &:hover {
+        background-color: rgba(var(--primary-6), 0.1) !important;
+      }
+    }
+
+    .arco-menu-item.arco-menu-item-active {
+      background-color: rgba(var(--primary-6), 0.25) !important;
+      font-weight: 600;
+
+      &.custom-profiles::before {
+        background-color: rgb(var(--primary-6)) !important;
       }
     }
   }
+}
 
-  .profiles {
-    overflow-y: auto;
+/* 统一 icon 占位宽度，保证直连 & 系统代理左对齐 */
+.menu-icon-holder {
+  display: inline-flex;
+  width: 20px;
+  justify-content: center;
+  align-items: center;
+}
 
-    /* Mac 风格分割线：极细、低对比 */
-    :deep(.arco-divider-horizontal) {
-      margin: 4px 0;
-      border-top: 0.5px solid rgba(255, 255, 255, 0.06);
+/* 系统代理圆点 */
+.sys-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.sys-on {
+  background-color: #4caf50;
+}
+.sys-custom {
+  background-color: #ff9800;
+}
+.sys-off {
+  background-color: #cccccc;
+}
+
+.logo {
+  text-align: center;
+  border-bottom: 0.5px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--color-bg-4);
+  padding: 0.6em 0.4em;
+
+  img {
+    max-height: 2.6em;
+  }
+}
+
+.settings {
+  padding: 0.2em 0.6em 0.4em;
+  text-align: center;
+  border-top: 0.5px solid rgba(255, 255, 255, 0.08);
+  background-color: var(--color-bg-5);
+
+  .exit-info {
+    margin-top: 4px;
+    font-size: 11px;
+    color: var(--color-text-3);
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 4px;
+
+    .exit-ip {
+      font-family: monospace;
+      font-size: 11px;
     }
 
-    .arco-menu-inner {
-      padding-left: 0;
+    .exit-flag {
+      font-size: 13px;
+    }
 
-      .arco-menu-item {
-        position: relative;
-        padding: 6px 12px !important;   /* 行高更紧凑 */
-        min-height: 32px !important;
-        font-size: 13px;
-        line-height: 16px;
-
-        .profile-text {
-          display: inline-flex;
-          align-items: baseline;
-          gap: 4px;
-        }
-
-        .profile-city {
-          font-size: 11px;
-          color: var(--color-text-3);
-        }
-
-        .color-indicator {
-          display: inline-block;
-          width: 0.85em;
-          height: 0.85em;
-          border-radius: 50%;
-          background-color: var(--indicator-color, #999);
-          margin-right: 6px;
-        }
-
-        .flag-icon {
-          font-size: 1.1em;
-          margin-right: 6px;
-          line-height: 1;
-        }
-
-        &.custom-profiles::before {
-          content: "";
-          display: block;
-          height: 100%;
-          width: 4px;
-          background-color: var(--indicator-color, #999);
-          position: absolute;
-          left: 0;
-          top: 0;
-          border-radius: 0 3px 3px 0;
-        }
-
-        /* hover 高亮 */
-        &:hover {
-          background-color: rgba(var(--primary-6), 0.10) !important;
-        }
-      }
-
-      /* 选中项：深色、高亮 */
-      .arco-menu-item.arco-menu-item-active {
-        background-color: rgba(var(--primary-6), 0.25) !important;
-        font-weight: 600;
-
-        &.custom-profiles::before {
-          background-color: rgb(var(--primary-6)) !important;
-        }
-      }
+    .exit-city {
+      opacity: 0.9;
     }
   }
 }
