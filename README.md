@@ -40,6 +40,15 @@ Proxyverse is using [transifex](https://explore.transifex.com/bytevet/proxyverse
 
 ## Modifications at 16/15/2025
 
+此分支版本专注于隐私保护、用户界面改进以及本地运行
+1 所有追踪、遥测和远程报告功能均已完全移除。
+2 已移除 Sentry Vue SDK、Sentry Vite 插件及所有相关代码
+3 任何用户数据或配置都不会上传到任何地方。
+4 重构弹出窗口界面（更简洁、更紧凑）
+5 新增国家/城市检测及国旗显示功能
+6 代理模式更改时自动刷新
+7 修改了插件显示的图标
+
 ✅ Summary of Modifications 
 
 This fork focuses on privacy, UI improvements, and local-only operation.
