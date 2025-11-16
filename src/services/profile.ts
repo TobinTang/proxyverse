@@ -150,3 +150,95 @@ export async function deleteProfile(profileID: string) {
   delete data[profileID];
   await overwriteProfiles(data);
 }
+
+/**
+ * ✅ 校验 ProxyProfile 合法性
+ * - 返回 null 表示通过
+ * - 返回错误字符串表示有问题
+ */
+export function validateProfile(profile: ProxyProfile): string | null {
+  if (!profile) {
+    return "配置为空";
+  }
+
+  // direct / system 不需要校验
+  if (profile.proxyType === "direct" || profile.proxyType === "system") {
+    return null;
+  }
+
+  // auto 模式：检查 rules 与 profileID
+  if (profile.proxyType === "auto") {
+    const autoProfile = profile as ProfileAutoSwitch;
+    if (!autoProfile.rules || !Array.isArray(autoProfile.rules)) {
+      return "Auto 模式下 rules 不合法";
+    }
+    for (const r of autoProfile.rules) {
+      if (!r.profileID || !r.profileID.trim()) {
+        return "Auto 模式中存在空的 profileID";
+      }
+    }
+    if (!autoProfile.defaultProfileID || !autoProfile.defaultProfileID.trim()) {
+      return "Auto 模式下 defaultProfileID 不能为空";
+    }
+    return null;
+  }
+
+  // pac 模式：pacScript 必须存在，同时可能也带有 proxyRules
+  if (profile.proxyType === "pac") {
+    const pacProfile = profile as ProfileSimple;
+    if (!pacProfile.pacScript) {
+      return "PAC 配置缺少 pacScript";
+    }
+    if (pacProfile.proxyRules) {
+      const err = validateProxyRules(pacProfile.proxyRules);
+      if (err) return err;
+    }
+    return null;
+  }
+
+  // proxy 模式：主要校验 proxyRules
+  if (profile.proxyType === "proxy") {
+    const proxyProfile = profile as ProfileSimple;
+    const err = validateProxyRules(proxyProfile.proxyRules);
+    if (err) return err;
+    return null;
+  }
+
+  return null;
+}
+
+/**
+ * ✅ 校验 proxyRules 内容：host 必须非空，port 必须为 1–65535 整数
+ */
+function validateProxyRules(rules: {
+  default: ProxyServer;
+  http?: ProxyServer;
+  https?: ProxyServer;
+  ftp?: ProxyServer;
+  bypassList: string[];
+}): string | null {
+  if (!rules || !rules.default) {
+    return "proxyRules 或 default 服务器配置为空";
+  }
+
+  const servers: ProxyServer[] = [
+    rules.default,
+    rules.http,
+    rules.https,
+    rules.ftp,
+  ].filter(Boolean) as ProxyServer[];
+
+  for (const server of servers) {
+    const host = (server.host || "").trim();
+    if (!host) {
+      return "代理 host 不能为空";
+    }
+
+    const portNum = Number(server.port);
+    if (!Number.isInteger(portNum) || portNum <= 0 || portNum > 65535) {
+      return `代理端口不合法: ${server.port}`;
+    }
+  }
+
+  return null;
+}
