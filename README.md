@@ -38,6 +38,8 @@ It's still in the early development stage, and more features are still on the w
 
 Proxyverse is using [transifex](https://explore.transifex.com/bytevet/proxyverse/) for translations.
 
+## Modifications at 16/15/2025
+
 ✅ Summary of Modifications 
 
 This fork focuses on privacy, UI improvements, and local-only operation.
